@@ -5,12 +5,14 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.routers import question
 from app.models.question import Question
 from app.models.db_models import QuestionDB, AnswerDB
 from sqlalchemy.orm import Session
 from fastapi import Depends, FastAPI
 from contextlib import asynccontextmanager
 from app.database import get_db, init_db
+from app.routers import extraction
 
 
 @asynccontextmanager
@@ -32,6 +34,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Register routers
+app.include_router(extraction.router)
+app.include_router(question.router)
 
 @app.get("/")
 def read_root():
@@ -46,12 +51,6 @@ def read_item(item_id: int, q: str | None = None):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-#get db questions count
-@app.get("/questions/count")
-def get_questions_count(db: Session = Depends(get_db)):
-    count = db.query(QuestionDB).count()
-    return {"questions_count": count}
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+#exercise files
+exercises/
+
 # Distribution / packaging
 .Python
 build/
