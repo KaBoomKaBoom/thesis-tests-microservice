@@ -5,9 +5,12 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from fastapi import FastAPI
+from app.models.question import Question
+from app.models.db_models import QuestionDB, AnswerDB
+from sqlalchemy.orm import Session
+from fastapi import Depends, FastAPI
 from contextlib import asynccontextmanager
-from app.database import init_db
+from app.database import get_db, init_db
 
 
 @asynccontextmanager
@@ -39,6 +42,16 @@ def read_root():
 def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
+#check db health
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+#get db questions count
+@app.get("/questions/count")
+def get_questions_count(db: Session = Depends(get_db)):
+    count = db.query(QuestionDB).count()
+    return {"questions_count": count}
 
 if __name__ == "__main__":
     import uvicorn
