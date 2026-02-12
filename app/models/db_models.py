@@ -36,7 +36,7 @@ class QuestionDB(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     path_to_question = Column(String(500), nullable=False)
-    answer_id = Column(Integer, ForeignKey("answers.id"), nullable=False)
+    answer_id = Column(Integer, ForeignKey("answers.id"), nullable=True)  # Nullable since answers uploaded separately
     type = Column(SQLEnum(QuestionType), nullable=False, index=True)
     question_number = Column(Integer, nullable=False, index=True)
     

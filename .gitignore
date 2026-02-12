@@ -8,6 +8,7 @@ __pycache__/
 
 #exercise files
 exercises/
+tests/
 
 # Distribution / packaging
 .Python

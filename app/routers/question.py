@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.database import get_db
 from app.models.db_models import QuestionDB
-from app.services.pdf_extraction_service import extract_and_save_questions
+# from app.services.pdf_extraction_service import extract_and_save_questions
 from app.models.question import QuestionType
 
 
