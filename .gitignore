@@ -9,6 +9,7 @@ __pycache__/
 #exercise files
 exercises/
 tests/
+test_llava_extraction.py
 
 # Distribution / packaging
 .Python
