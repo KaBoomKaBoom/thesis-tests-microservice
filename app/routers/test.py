@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.cache import get_redis
+from app.services.cache_service import cache_get_test, cache_set_test
 from app.models.test import (
     GenerateTestRequest, GenerateTestResponse, QuestionEntry,
     VerifyTestRequest, VerifyTestResponse, AnswerResult,
@@ -34,7 +36,13 @@ def generate_test_endpoint(
     - Returns: test_id, per-question slot with correct answer id and 3 random incorrect answer ids.
     """
     try:
-        return generate_test(request, db)
+        result = generate_test(request, db)
+        # Persist in Redis (best-effort, never blocks the response)
+        try:
+            cache_set_test(get_redis(), result)
+        except Exception:
+            pass
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
@@ -46,9 +54,17 @@ def get_test_by_id(test_id: int, db: Session = Depends(get_db)):
     """
     Retrieve a previously generated test by its ID.
 
-    Returns the same structure as the generate endpoint, reconstructing
-    correct / incorrect answer ids on the fly.
+    Checks Redis first (24-hour cache). Falls back to the database.
     """
+    # ── Cache hit ─────────────────────────────────────────────────────────────
+    try:
+        cached = cache_get_test(get_redis(), test_id)
+        if cached is not None:
+            return cached
+    except Exception:
+        pass  # Redis unavailable – continue to DB
+
+    # ── Cache miss: load from DB ──────────────────────────────────────────────
     test_db: TestDB | None = db.query(TestDB).filter(TestDB.id == test_id).first()
     if not test_db:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -91,12 +107,20 @@ def get_test_by_id(test_id: int, db: Session = Depends(get_db)):
             )
         )
 
-    return GenerateTestResponse(
+    response = GenerateTestResponse(
         test_id=test_db.id,
         type=test_db.type.value,
         language=test_db.language,
         questions=entries,
     )
+
+    # Backfill the cache so subsequent requests are served from Redis
+    try:
+        cache_set_test(get_redis(), response)
+    except Exception:
+        pass
+
+    return response
 
 
 @router.post("/verify", response_model=VerifyTestResponse)

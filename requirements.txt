@@ -19,3 +19,6 @@ camelot-py[base]>=1.0.9
 
 # File uploads
 python-multipart==0.0.20
+
+# Cache
+redis==5.2.1

@@ -1,5 +1,18 @@
 import sys
+import logging
 from pathlib import Path
+
+# Configure logging before anything else
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    stream=sys.stdout,
+)
+# Silence noisy third-party loggers
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Add parent directory to path when running directly
 if __name__ == "__main__":
