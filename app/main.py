@@ -5,7 +5,7 @@ from pathlib import Path
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.routers import answer, question
+from app.routers import answer, question, test
 from app.models.question import Question
 from app.models.db_models import QuestionDB, AnswerDB
 from sqlalchemy.orm import Session
@@ -38,6 +38,7 @@ app = FastAPI(
 app.include_router(extraction.router)
 app.include_router(question.router)
 app.include_router(answer.router)
+app.include_router(test.router)
 
 @app.get("/")
 def read_root():
