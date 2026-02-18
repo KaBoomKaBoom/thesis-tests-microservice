@@ -10,6 +10,7 @@ __pycache__/
 exercises/
 tests/
 test_llava_extraction.py
+TODO
 
 # Distribution / packaging
 .Python
