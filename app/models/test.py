@@ -33,3 +33,48 @@ class GenerateTestResponse(BaseModel):
     type: str
     language: Optional[str]
     questions: List[QuestionEntry]
+
+
+# ── Verification models ───────────────────────────────────────────────────────
+
+class SubmittedAnswer(BaseModel):
+    """A single answer submitted by the user for one question slot."""
+    question_id: int = Field(..., description="ID of the question being answered")
+    answer_id: Optional[int] = Field(None, description="ID of the answer chosen by the user (null = skipped)")
+
+
+class VerifyTestRequest(BaseModel):
+    """Request body for verifying a completed test."""
+    test_id: int = Field(..., description="ID of the test to verify", ge=1)
+    answers: List[SubmittedAnswer] = Field(..., description="One entry per question in the test")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "test_id": 1,
+                "answers": [
+                    {"question_id": 42, "answer_id": 7},
+                    {"question_id": 43, "answer_id": None}
+                ]
+            }
+        }
+    )
+
+
+class AnswerResult(BaseModel):
+    """Per-question verification result."""
+    position: int
+    question_id: int
+    submitted_answer_id: Optional[int]
+    correct_answer_id: Optional[int]
+    is_correct: bool
+
+
+class VerifyTestResponse(BaseModel):
+    """Response returned after verifying a test."""
+    test_id: int
+    total_questions: int
+    correct_answers: int
+    skipped: int
+    score_percentage: float = Field(..., description="Percentage of correctly answered questions (0-100)")
+    results: List[AnswerResult]

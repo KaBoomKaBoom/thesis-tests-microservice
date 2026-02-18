@@ -8,7 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.test import GenerateTestRequest, GenerateTestResponse, QuestionEntry
+from app.models.test import (
+    GenerateTestRequest, GenerateTestResponse, QuestionEntry,
+    VerifyTestRequest, VerifyTestResponse, AnswerResult,
+)
 from app.models.db_models import TestDB, test_questions, QuestionDB
 from app.services.test_generation_service import generate_test
 
@@ -93,4 +96,81 @@ def get_test_by_id(test_id: int, db: Session = Depends(get_db)):
         type=test_db.type.value,
         language=test_db.language,
         questions=entries,
+    )
+
+
+@router.post("/verify", response_model=VerifyTestResponse)
+def verify_test(
+    request: VerifyTestRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Verify a completed test.
+
+    Accepts the test_id and the list of answers submitted by the user.
+    Returns per-question correctness and an overall score percentage.
+    """
+    # Load test
+    test_db: TestDB | None = db.query(TestDB).filter(TestDB.id == request.test_id).first()
+    if not test_db:
+        raise HTTPException(status_code=404, detail="Test not found")
+
+    # Load ordered question slots
+    rows = (
+        db.query(test_questions.c.question_id, test_questions.c.position)
+        .filter(test_questions.c.test_id == request.test_id)
+        .order_by(test_questions.c.position)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Test has no questions")
+
+    question_ids = [r.question_id for r in rows]
+    questions: list[QuestionDB] = (
+        db.query(QuestionDB).filter(QuestionDB.id.in_(question_ids)).all()
+    )
+    q_map = {q.id: q for q in questions}
+
+    # Index submitted answers by question_id for O(1) lookup
+    submitted_map = {a.question_id: a.answer_id for a in request.answers}
+
+    results: list[AnswerResult] = []
+    correct_count = 0
+    skipped_count = 0
+
+    for row in rows:
+        q = q_map.get(row.question_id)
+        if q is None:
+            continue
+
+        correct_id = q.answer_id
+        submitted_id = submitted_map.get(q.id)  # None if not submitted
+
+        if submitted_id is None:
+            skipped_count += 1
+
+        is_correct = (submitted_id is not None) and (submitted_id == correct_id)
+        if is_correct:
+            correct_count += 1
+
+        results.append(
+            AnswerResult(
+                position=row.position,
+                question_id=q.id,
+                submitted_answer_id=submitted_id,
+                correct_answer_id=correct_id,
+                is_correct=is_correct,
+            )
+        )
+
+    total = len(results)
+    score_pct = round((correct_count / total) * 100, 2) if total > 0 else 0.0
+
+    return VerifyTestResponse(
+        test_id=request.test_id,
+        total_questions=total,
+        correct_answers=correct_count,
+        skipped=skipped_count,
+        score_percentage=score_pct,
+        results=results,
     )
