@@ -31,6 +31,7 @@ STITCH_SEP_COLOR = (200, 200, 200)
 
 EXERCISE_NUM_RE = re.compile(r"^(\d{1,2})\.$")
 SUBPOINT_RE = re.compile(r"^[a-z]\)$")
+LANGUAGE_RE = re.compile(r"(?:^|[_\-\.\s])(ro|ru|en)(?:[_\-\.\s]|$)", re.IGNORECASE)
 
 
 # ─── Helper Functions ─────────────────────────────────────────────────────────
@@ -69,6 +70,20 @@ def _extend_to_page(ex: dict, page_idx: int, page_h: float, page_w: float) -> No
 
 def _pt_to_px(pt: float, page_h_pt: float, img_h_px: int) -> int:
     return int(pt * img_h_px / page_h_pt)
+
+
+def extract_language_from_filename(filename: str) -> Optional[str]:
+    """
+    Extract language code from PDF filename.
+    Looks for 'ro', 'ru', or 'en' as a standalone token separated by
+    underscores, hyphens, dots, spaces, or at the start/end of the stem.
+    Returns the lowercase language code, or None if not found.
+    """
+    stem = Path(filename).stem
+    match = LANGUAGE_RE.search(stem)
+    if match:
+        return match.group(1).lower()
+    return None
 
 
 # ─── Core Extraction Functions ────────────────────────────────────────────────
@@ -199,6 +214,9 @@ def extract_and_save_questions(
     Returns:
         Dict with extraction results
     """
+    # Detect language from filename
+    language = extract_language_from_filename(pdf_filename)
+
     # Create temporary PDF file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
         tmp_pdf.write(pdf_content)
@@ -245,7 +263,8 @@ def extract_and_save_questions(
                 path_to_question=relative_path,
                 answer_id=None,  # No answer yet - can be updated later
                 type=question_type,
-                question_number=ex['number']
+                question_number=ex['number'],
+                language=language
             )
             db.add(question)
             saved_count += 1

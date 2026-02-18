@@ -39,6 +39,7 @@ class QuestionDB(Base):
     answer_id = Column(Integer, ForeignKey("answers.id"), nullable=True)  # Nullable since answers uploaded separately
     type = Column(SQLEnum(QuestionType), nullable=False, index=True)
     question_number = Column(Integer, nullable=False, index=True)
+    language = Column(String(50), nullable=True)  # Optional field for language of the question
     
     # Relationship to answer
     answer = relationship("AnswerDB", back_populates="questions")
