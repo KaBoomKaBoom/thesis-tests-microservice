@@ -16,6 +16,7 @@ Rules
 """
 
 import random
+import logging
 from typing import List, Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -25,6 +26,8 @@ from app.models.test import GenerateTestRequest, GenerateTestResponse, QuestionE
 
 REQUIRED_QUESTION_NUMBERS = list(range(1, 13))   # 1 – 12
 WRONG_ANSWERS_COUNT = 3
+
+logger = logging.getLogger(__name__)
 
 
 def generate_test(request: GenerateTestRequest, db: Session) -> GenerateTestResponse:
@@ -59,20 +62,36 @@ def generate_test(request: GenerateTestRequest, db: Session) -> GenerateTestResp
 
     # ── 2. Persist the test ───────────────────────────────────────────────────
     test_db = TestDB(type=request.type, language=request.language)
-    db.add(test_db)
-    db.flush()  # get test_db.id without committing yet
+    try:
+        db.add(test_db)
+        db.flush()  # get test_db.id without committing yet
 
-    for position, question in enumerate(selected_questions, start=1):
-        db.execute(
-            test_questions.insert().values(
-                test_id=test_db.id,
-                question_id=question.id,
-                position=position,
+        for position, question in enumerate(selected_questions, start=1):
+            db.execute(
+                test_questions.insert().values(
+                    test_id=test_db.id,
+                    question_id=question.id,
+                    position=position,
+                )
             )
-        )
 
-    db.commit()
-    db.refresh(test_db)
+        db.commit()
+        db.refresh(test_db)
+        logger.info(
+            "Test saved in DB: test_id=%s, type=%s, language=%s, questions=%s",
+            test_db.id,
+            request.type.value,
+            request.language,
+            len(selected_questions),
+        )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to save generated test in DB (type=%s, language=%s)",
+            request.type.value,
+            request.language,
+        )
+        raise
 
     # ── 3. Build the pool of correct answer ids for distractor selection ─────
     # We only use answer_ids that are actually linked (not None) and belong to

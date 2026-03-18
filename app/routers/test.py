@@ -4,6 +4,7 @@ test.py
 Router for test generation and retrieval.
 """
 
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,60 @@ def generate_test_endpoint(
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Test generation failed: {exc}")
+
+#Get all available tests based on type and language
+@router.get("", response_model=list[GenerateTestResponse])
+def get_tests(type: str, language: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    Get all available tests based on type and language.
+
+    - **type**: Filter tests by type (e.g., "math", "physics").
+    - **language**: Optional filter by language (e.g., "ro").
+    
+    Returns a list of tests matching the criteria.
+    """
+    query = db.query(TestDB)
+    
+    if type:
+        query = query.filter(TestDB.type == type)
+    
+    if language:
+        query = query.filter(TestDB.language == language)
+    
+    tests_db = query.all()
+
+    if not tests_db:
+        return []
+
+    test_ids = [test.id for test in tests_db]
+    rows = (
+        db.query(test_questions.c.test_id, test_questions.c.question_id, test_questions.c.position)
+        .filter(test_questions.c.test_id.in_(test_ids))
+        .order_by(test_questions.c.test_id, test_questions.c.position)
+        .all()
+    )
+
+    questions_by_test: dict[int, list[QuestionEntry]] = {test_id: [] for test_id in test_ids}
+    for row in rows:
+        questions_by_test[row.test_id].append(
+            QuestionEntry(
+                position=row.position,
+                question_id=row.question_id,
+                correct_answer_id=None,
+                incorrect_answer_ids=[],
+            )
+        )
+
+    return [
+        GenerateTestResponse(
+            test_id=test.id,
+            type=test.type.value,
+            language=test.language,
+            questions=questions_by_test.get(test.id, []),
+        )
+        for test in tests_db
+    ]
+
 
 
 @router.get("/{test_id}", response_model=GenerateTestResponse)
