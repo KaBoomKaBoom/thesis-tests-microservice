@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+#exercise files
+exercises/
+tests/
+test_llava_extraction.py
+TODO
+
 # Distribution / packaging
 .Python
 build/
