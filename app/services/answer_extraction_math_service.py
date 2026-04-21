@@ -150,10 +150,10 @@ def extract_and_save_answers(
             
             for col_idx, cell_text in enumerate(header_row):
                 cell_lower = str(cell_text).lower()
-                if 'răspuns' in cell_lower or 'corect' in cell_lower:
+                if 'răspuns' in cell_lower or 'corect' in cell_lower or 'верный' in cell_lower or 'ответ' in cell_lower:
                     answer_col = col_idx
                     print(f"Found answer column: {col_idx}")
-                if 'etape' in cell_lower or 'rezolv' in cell_lower:
+                if 'etape' in cell_lower or 'rezolv' in cell_lower or 'этапы' in cell_lower or 'решения' in cell_lower:
                     steps_col = col_idx
                     print(f"Found steps column: {col_idx}")
             
