@@ -30,6 +30,10 @@ WRONG_ANSWERS_COUNT = 3
 logger = logging.getLogger(__name__)
 
 
+def _build_generated_test_name(question_type: str, language: str, test_id: int) -> str:
+    return f"generated_{question_type}_{language}_{test_id}"
+
+
 def generate_test(request: GenerateTestRequest, db: Session) -> GenerateTestResponse:
     """
     Generate a test, persist it, and return the full response payload.
@@ -61,10 +65,16 @@ def generate_test(request: GenerateTestRequest, db: Session) -> GenerateTestResp
         selected_questions.append(random.choice(candidates))
 
     # ── 2. Persist the test ───────────────────────────────────────────────────
-    test_db = TestDB(type=request.type, language=request.language)
+    test_db = TestDB(
+        user_id=0,
+        name="generated_pending",
+        type=request.type,
+        language=request.language,
+    )
     try:
         db.add(test_db)
         db.flush()  # get test_db.id without committing yet
+        test_db.name = _build_generated_test_name(request.type.value, request.language, test_db.id)
 
         for position, question in enumerate(selected_questions, start=1):
             db.execute(
@@ -132,6 +142,8 @@ def generate_test(request: GenerateTestRequest, db: Session) -> GenerateTestResp
 
     return GenerateTestResponse(
         test_id=test_db.id,
+        userId=test_db.user_id,
+        name=test_db.name,
         type=request.type.value,
         language=request.language,
         questions=entries,

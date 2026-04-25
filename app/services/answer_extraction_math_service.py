@@ -23,7 +23,7 @@ EXERCISE_NUM_RE = re.compile(r"^(\d{1,2})([a-z])?[\.\)]")
 
 
 def _get_test_name_from_barem(barem_filename: str) -> str:
-    return barem_filename.replace("_barem", "_test")
+    return barem_filename.replace("_barem", "")
 
 
 def _extract_exercise_number(text: str) -> Optional[int]:
@@ -375,73 +375,73 @@ def extract_and_save_answers(
                     final_image.save(str(steps_path), optimize=True)
                     steps_saved = True
                     print(f"    Steps: True ({sum(len(cells_by_page[p]['cells']) for p in cells_by_page)} cells across {len(cells_by_page)} pages)")
-                
-                if not (answer_saved or steps_saved):
-                    continue
-                
-                print(f"    Saving to database...")
-                
-                # Save to database
-                answer_rel_path = None
-                steps_rel_path = None
-                
-                if answer_saved:
-                    answer_rel_path = f"{output_dir.relative_to(output_base_dir.parent)}/exercise_{ex_num:02d}_answer.png".replace("\\", "/")
-                if steps_saved:
-                    steps_rel_path = f"{output_dir.relative_to(output_base_dir.parent)}/exercise_{ex_num:02d}_steps.png".replace("\\", "/")
-                
-                primary_path = answer_rel_path if answer_rel_path else steps_rel_path
-                
-                # Find the question for this exercise from THIS specific test
-                # Match by question_number AND path containing the test directory
-                question = db.query(QuestionDB).filter(
-                    QuestionDB.question_number == ex_num,
-                    QuestionDB.path_to_question.like(f"%{pdf_stem}%")
-                ).first()
-                
-                if question:
-                    # Check if this question already has an answer
-                    if question.answer_id:
-                        # Update existing answer
-                        existing_answer = db.query(AnswerDB).filter(AnswerDB.id == question.answer_id).first()
-                        if existing_answer:
-                            existing_answer.path_to_answer = primary_path
-                            existing_answer.question_number = ex_num
-                            answer_id = existing_answer.id
-                            print(f"    Updated existing answer (id={answer_id})")
-                        else:
-                            # Answer ID exists but answer not found, create new
-                            answer = AnswerDB(path_to_answer=primary_path, question_number=ex_num)
-                            db.add(answer)
-                            db.flush()
-                            answer_id = answer.id
-                            question.answer_id = answer_id
-                            print(f"    Created new answer (id={answer_id})")
+
+            if not (answer_saved or steps_saved):
+                continue
+
+            print(f"    Saving to database...")
+
+            # Save to database
+            answer_rel_path = None
+            steps_rel_path = None
+
+            if answer_saved:
+                answer_rel_path = f"{output_dir.relative_to(output_base_dir.parent)}/exercise_{ex_num:02d}_answer.png".replace("\\", "/")
+            if steps_saved:
+                steps_rel_path = f"{output_dir.relative_to(output_base_dir.parent)}/exercise_{ex_num:02d}_steps.png".replace("\\", "/")
+
+            primary_path = answer_rel_path if answer_rel_path else steps_rel_path
+
+            # Find the question for this exercise from THIS specific test
+            # Match by question_number AND path containing the test directory
+            question = db.query(QuestionDB).filter(
+                QuestionDB.question_number == ex_num,
+                QuestionDB.path_to_question.like(f"%{pdf_stem}%")
+            ).first()
+
+            if question:
+                # Check if this question already has an answer
+                if question.answer_id:
+                    # Update existing answer
+                    existing_answer = db.query(AnswerDB).filter(AnswerDB.id == question.answer_id).first()
+                    if existing_answer:
+                        existing_answer.path_to_answer = primary_path
+                        existing_answer.question_number = ex_num
+                        answer_id = existing_answer.id
+                        print(f"    Updated existing answer (id={answer_id})")
                     else:
-                        # Create new answer for this question
+                        # Answer ID exists but answer not found, create new
                         answer = AnswerDB(path_to_answer=primary_path, question_number=ex_num)
                         db.add(answer)
                         db.flush()
                         answer_id = answer.id
                         question.answer_id = answer_id
-                        print(f"    Created new answer and linked to question (id={answer_id})")
+                        print(f"    Created new answer (id={answer_id})")
                 else:
-                    # No matching question found - create orphan answer
+                    # Create new answer for this question
                     answer = AnswerDB(path_to_answer=primary_path, question_number=ex_num)
                     db.add(answer)
                     db.flush()
                     answer_id = answer.id
-                    print(f"    Warning: No question found for exercise {ex_num} in {pdf_stem}, created orphan answer (id={answer_id})")
-                
-                saved_count += 1
-                saved_answers.append({
-                    "exercise_number": ex_num,
-                    "answer_path": answer_rel_path,
-                    "steps_path": steps_rel_path,
-                    "page": page_num
-                })
-                
-                print(f"    Total saved so far: {saved_count}")
+                    question.answer_id = answer_id
+                    print(f"    Created new answer and linked to question (id={answer_id})")
+            else:
+                # No matching question found - create orphan answer
+                answer = AnswerDB(path_to_answer=primary_path, question_number=ex_num)
+                db.add(answer)
+                db.flush()
+                answer_id = answer.id
+                print(f"    Warning: No question found for exercise {ex_num} in {pdf_stem}, created orphan answer (id={answer_id})")
+
+            saved_count += 1
+            saved_answers.append({
+                "exercise_number": ex_num,
+                "answer_path": answer_rel_path,
+                "steps_path": steps_rel_path,
+                "page": page_num
+            })
+
+            print(f"    Total saved so far: {saved_count}")
 
         db.commit()
 
