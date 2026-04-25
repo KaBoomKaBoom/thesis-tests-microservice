@@ -60,6 +60,8 @@ class TestDB(Base):
     __tablename__ = "tests"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, default=0, index=True)
+    name = Column(String(255), nullable=False, index=True)
     type = Column(SQLEnum(QuestionType), nullable=False, index=True)
     language = Column(String(10), nullable=True, index=True)
 

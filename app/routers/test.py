@@ -24,6 +24,43 @@ router = APIRouter(
 )
 
 
+def _build_question_entries(rows, db: Session) -> list[QuestionEntry]:
+    question_ids = [r.question_id for r in rows]
+    if not question_ids:
+        return []
+
+    questions: list[QuestionDB] = (
+        db.query(QuestionDB).filter(QuestionDB.id.in_(question_ids)).all()
+    )
+    q_map = {q.id: q for q in questions}
+
+    all_correct = [q_map[qid].answer_id for qid in question_ids if qid in q_map]
+    distractor_pool = list({aid for aid in all_correct if aid is not None})
+
+    import random
+    from app.services.test_generation_service import WRONG_ANSWERS_COUNT
+
+    entries: list[QuestionEntry] = []
+    for row in rows:
+        q = q_map.get(row.question_id)
+        if q is None:
+            continue
+        correct_id = q.answer_id
+        wrong_pool = [aid for aid in distractor_pool if aid != correct_id]
+        wrong_count = min(WRONG_ANSWERS_COUNT, len(wrong_pool))
+        incorrect_ids = random.sample(wrong_pool, wrong_count) if wrong_pool else []
+        entries.append(
+            QuestionEntry(
+                position=row.position,
+                question_id=q.id,
+                correct_answer_id=correct_id,
+                incorrect_answer_ids=incorrect_ids,
+            )
+        )
+
+    return entries
+
+
 @router.post("/generate", response_model=GenerateTestResponse, status_code=201)
 def generate_test_endpoint(
     request: GenerateTestRequest,
@@ -81,23 +118,51 @@ def get_tests(type: str, language: Optional[str] = None, db: Session = Depends(g
         .all()
     )
 
-    questions_by_test: dict[int, list[QuestionEntry]] = {test_id: [] for test_id in test_ids}
+    rows_by_test: dict[int, list] = {test_id: [] for test_id in test_ids}
     for row in rows:
-        questions_by_test[row.test_id].append(
-            QuestionEntry(
-                position=row.position,
-                question_id=row.question_id,
-                correct_answer_id=None,
-                incorrect_answer_ids=[],
-            )
-        )
+        rows_by_test[row.test_id].append(row)
 
     return [
         GenerateTestResponse(
             test_id=test.id,
+            userId=test.user_id,
+            name=test.name,
             type=test.type.value,
             language=test.language,
-            questions=questions_by_test.get(test.id, []),
+            questions=_build_question_entries(rows_by_test.get(test.id, []), db),
+        )
+        for test in tests_db
+    ]
+
+
+@router.get("/user/{userId}", response_model=list[GenerateTestResponse])
+def get_tests_by_user(userId: int, db: Session = Depends(get_db)):
+    """Get all tests uploaded/generated under a specific user ID."""
+    tests_db = db.query(TestDB).filter(TestDB.user_id == userId).all()
+
+    if not tests_db:
+        return []
+
+    test_ids = [test.id for test in tests_db]
+    rows = (
+        db.query(test_questions.c.test_id, test_questions.c.question_id, test_questions.c.position)
+        .filter(test_questions.c.test_id.in_(test_ids))
+        .order_by(test_questions.c.test_id, test_questions.c.position)
+        .all()
+    )
+
+    rows_by_test: dict[int, list] = {test_id: [] for test_id in test_ids}
+    for row in rows:
+        rows_by_test[row.test_id].append(row)
+
+    return [
+        GenerateTestResponse(
+            test_id=test.id,
+            userId=test.user_id,
+            name=test.name,
+            type=test.type.value,
+            language=test.language,
+            questions=_build_question_entries(rows_by_test.get(test.id, []), db),
         )
         for test in tests_db
     ]
@@ -132,38 +197,12 @@ def get_test_by_id(test_id: int, db: Session = Depends(get_db)):
         .all()
     )
 
-    question_ids = [r.question_id for r in rows]
-    questions: list[QuestionDB] = (
-        db.query(QuestionDB).filter(QuestionDB.id.in_(question_ids)).all()
-    )
-    q_map = {q.id: q for q in questions}
-
-    all_correct = [q_map[qid].answer_id for qid in question_ids if qid in q_map]
-    distractor_pool = list({aid for aid in all_correct if aid is not None})
-
-    import random
-
-    entries: list[QuestionEntry] = []
-    for row in rows:
-        q = q_map.get(row.question_id)
-        if q is None:
-            continue
-        correct_id = q.answer_id
-        wrong_pool = [aid for aid in distractor_pool if aid != correct_id]
-        from app.services.test_generation_service import WRONG_ANSWERS_COUNT
-        wrong_count = min(WRONG_ANSWERS_COUNT, len(wrong_pool))
-        incorrect_ids = random.sample(wrong_pool, wrong_count) if wrong_pool else []
-        entries.append(
-            QuestionEntry(
-                position=row.position,
-                question_id=q.id,
-                correct_answer_id=correct_id,
-                incorrect_answer_ids=incorrect_ids,
-            )
-        )
+    entries = _build_question_entries(rows, db)
 
     response = GenerateTestResponse(
         test_id=test_db.id,
+        userId=test_db.user_id,
+        name=test_db.name,
         type=test_db.type.value,
         language=test_db.language,
         questions=entries,

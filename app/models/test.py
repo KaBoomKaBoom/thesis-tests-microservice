@@ -30,6 +30,8 @@ class QuestionEntry(BaseModel):
 class GenerateTestResponse(BaseModel):
     """Response returned after generating a test."""
     test_id: int
+    userId: int
+    name: str
     type: str
     language: Optional[str]
     questions: List[QuestionEntry]

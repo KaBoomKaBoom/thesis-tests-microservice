@@ -22,3 +22,6 @@ python-multipart==0.0.20
 
 # Cache
 redis==5.2.1
+
+# Migrations
+alembic==1.14.1

@@ -198,7 +198,8 @@ def extract_and_save_questions(
     db: Session,
     output_base_dir: Path = Path("exercises"),
     question_type: QuestionType = QuestionType.MATH,
-    dpi: int = RENDER_DPI
+    dpi: int = RENDER_DPI,
+    language: Optional[str] = None
 ) -> Dict[str, any]:
     """
     Extract questions from PDF and save to database.
@@ -210,12 +211,14 @@ def extract_and_save_questions(
         output_base_dir: Base directory for saving extracted images
         question_type: Type of questions (default: MATH)
         dpi: Resolution for rendering
+        language: Language code (ro, ru, en) - if not provided, detected from filename
     
     Returns:
         Dict with extraction results
     """
-    # Detect language from filename
-    language = extract_language_from_filename(pdf_filename)
+    # Use provided language or detect from filename
+    if language is None:
+        language = extract_language_from_filename(pdf_filename)
 
     # Create temporary PDF file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
@@ -267,8 +270,10 @@ def extract_and_save_questions(
                 language=language
             )
             db.add(question)
+            db.flush()
             saved_count += 1
             saved_questions.append({
+                "id": question.id,
                 "number": ex['number'],
                 "path": relative_path
             })
@@ -279,6 +284,7 @@ def extract_and_save_questions(
             "success": True,
             "message": f"Successfully extracted and saved {saved_count} questions",
             "questions_saved": saved_count,
+            "language": language,
             "questions": saved_questions,
             "output_directory": str(output_dir)
         }

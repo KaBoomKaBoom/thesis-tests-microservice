@@ -6,12 +6,14 @@ Router for PDF extraction endpoints.
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
+from pathlib import Path
 
 from app.database import get_db
 from app.services.pdf_extraction_math_service import extract_and_save_questions
 from app.services.answer_extraction_math_service import extract_and_save_answers
 from app.models.question import QuestionType
+from app.models.db_models import TestDB, test_questions
 
 
 router = APIRouter(
@@ -22,49 +24,110 @@ router = APIRouter(
 
 @router.post("/upload-pdf")
 async def upload_and_extract_pdf(
-    file: UploadFile = File(..., description="PDF file containing questions"),
+    files: List[UploadFile] = File(..., description="PDF file(s) containing questions"),
+    user_id: int = Form(..., description="Uploader user ID", ge=1),
     question_type: Optional[QuestionType] = Form(QuestionType.MATH, description="Type of questions in the PDF"),
+    language: Optional[str] = Form(None, description="Language code (ro, ru, en) - if not provided, detected from filename"),
     db: Session = Depends(get_db)
 ):
     """
-    Upload a PDF file and extract questions from it.
+    Upload one or more PDF files and extract questions from them.
     
-    - **file**: PDF file to extract questions from
+    - **files**: PDF file(s) to extract questions from
     - **question_type**: Type of questions (math, physics, etc.) - defaults to math
     
-    Returns the extraction results and saves questions to the database.
+    Returns extraction results for all files and saves questions to the database.
     """
-    # Validate file type
-    if not file.filename.endswith('.pdf'):
+    if not files:
         raise HTTPException(
             status_code=400,
-            detail="Only PDF files are allowed"
+            detail="At least one PDF file is required"
         )
     
-    # Read file content
-    pdf_content = await file.read()
+    results = []
     
-    if len(pdf_content) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Empty file provided"
+    for file in files:
+        # Validate file type
+        if not file.filename.endswith('.pdf'):
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "message": "Only PDF files are allowed"
+            })
+            continue
+        
+        # Read file content
+        pdf_content = await file.read()
+        
+        if len(pdf_content) == 0:
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "message": "Empty file provided"
+            })
+            continue
+        
+        # Extract and save questions
+        result = extract_and_save_questions(
+            pdf_content=pdf_content,
+            pdf_filename=file.filename,
+            db=db,
+            question_type=question_type,
+            language=language
         )
+        
+        if not result["success"]:
+            results.append({
+                "filename": file.filename,
+                **result
+            })
+            continue
+
+        # Save uploaded test metadata and link extracted questions to the test
+        try:
+            test_name = Path(file.filename).stem
+            uploaded_test = TestDB(
+                user_id=user_id,
+                name=test_name,
+                type=question_type,
+                language=result.get("language"),
+            )
+            db.add(uploaded_test)
+            db.flush()
+
+            for item in sorted(result.get("questions", []), key=lambda q: q.get("number", 0)):
+                question_id = item.get("id")
+                position = item.get("number")
+                if question_id is None or position is None:
+                    continue
+                db.execute(
+                    test_questions.insert().values(
+                        test_id=uploaded_test.id,
+                        question_id=question_id,
+                        position=position,
+                    )
+                )
+
+            db.commit()
+            result["filename"] = file.filename
+            result["test_id"] = uploaded_test.id
+            result["test_name"] = uploaded_test.name
+            result["userId"] = uploaded_test.user_id
+            results.append(result)
+        except Exception as e:
+            db.rollback()
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "message": f"Questions were extracted, but creating test metadata failed: {str(e)}"
+            })
     
-    # Extract and save questions
-    result = extract_and_save_questions(
-        pdf_content=pdf_content,
-        pdf_filename=file.filename,
-        db=db,
-        question_type=question_type
-    )
-    
-    if not result["success"]:
-        raise HTTPException(
-            status_code=500,
-            detail=result["message"]
-        )
-    
-    return result
+    return {
+        "total_files": len(files),
+        "processed": len([r for r in results if r.get("success", False)]),
+        "failed": len([r for r in results if not r.get("success", False)]),
+        "results": results
+    }
 
 
 @router.get("/status")
