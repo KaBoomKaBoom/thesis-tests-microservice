@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     algorithm: str
     access_token_expire_minutes: int
 
+    # Redis — use localhost when running outside Docker, redis-cache inside Docker
+    redis_url: str = "redis://localhost:6379/0"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False

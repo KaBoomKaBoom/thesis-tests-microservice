@@ -1,11 +1,24 @@
 import sys
+import logging
 from pathlib import Path
+
+# Configure logging before anything else
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    stream=sys.stdout,
+)
+# Silence noisy third-party loggers
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Add parent directory to path when running directly
 if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.routers import answer, question
+from app.routers import answer, question, test
 from app.models.question import Question
 from app.models.db_models import QuestionDB, AnswerDB
 from sqlalchemy.orm import Session
@@ -38,6 +51,7 @@ app = FastAPI(
 app.include_router(extraction.router)
 app.include_router(question.router)
 app.include_router(answer.router)
+app.include_router(test.router)
 
 @app.get("/")
 def read_root():
